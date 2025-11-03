@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Car Game</title>
+    <style>
+        /* Basic reset and full-screen canvas */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* Info display */
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <!-- Info panel for controls -->
+    <div id="info">
+        Use Arrow Keys to Drive
+    </div>
+
+    <!-- Import Three.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script type="module">
+        // Ensure THREE is available from the global scope
+        const THREE = window.THREE;
+
+        // --- Global Variables ---
+        let scene, camera, renderer;
+        let car;
+        let keys = {}; // Object to store pressed keys
+        let obstacles = []; // Array to store trees for collision
+        let directionalLight; // <-- MOVED DECLARATION HERE
+
+        // Car physics parameters
+        let velocity = 0;
+        let turnRate = 0;
+        const acceleration = 0.02;
+        const deceleration = 0.98; // Friction
+        const maxSpeed = 1.0;
+        const maxReverseSpeed = -0.3;
+        const turnSpeed = 0.01;
+        const turnDamping = 0.95; // Steering self-centers
+        const maxTurnRate = 0.05;
+
+        // Wheel meshes for rotation
+        let wheelFL, wheelFR, wheelBL, wheelBR;
+
+        // --- Helper Function ---
+        /**
+         * Smoothly interpolates between two angles, finding the shortest path.
+         * @param {number} a - The starting angle (in radians).
+         * @param {number} b - The target angle (in radians).
+         * @param {number} t - The interpolation factor (0.0 to 1.0).
+         */
+        function lerpAngle(a, b, t) {
+            let delta = b - a;
+            // Wrap around the circle
+            if (delta > Math.PI) delta -= Math.PI * 2;
+            if (delta < -Math.PI) delta += Math.PI * 2;
+            return a + delta * t;
+        }
+
+        // --- Initialization ---
+        function init() {
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb); // Sky blue
+            scene.fog = new THREE.Fog(0x87ceeb, 50, 250); // Fog for distance, a bit closer
+
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+            document.body.appendChild(renderer.domElement);
+
+            // 4. Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Slightly darker ambient
+            scene.add(ambientLight);
+
+            directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // <-- REMOVED CONST
+            directionalLight.position.set(50, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            // Focus shadows near the car
+            directionalLight.shadow.camera.near = 50;
+            directionalLight.shadow.camera.far = 200;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            scene.add(directionalLight);
+
+            // 5. Ground
+            const groundGeometry = new THREE.PlaneGeometry(500, 500);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x4a7d29, // Grassy green
+                roughness: 0.9 // Less reflective
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2; // Lay it flat
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // 6. Car
+            createCar();
+            directionalLight.target = car; // Make the light follow the car
+
+            // 7. Trees (Obstacles)
+            for (let i = 0; i < 150; i++) { // Add more trees
+                const tree = createTree();
+                tree.position.set(
+                    (Math.random() - 0.5) * 480, // Spread them out
+                    0, // Trees start from the ground
+                    (Math.random() - 0.5) * 480
+                );
+                
+                // Don't place trees too close to the starting point
+                const distFromStart = Math.sqrt(tree.position.x * tree.position.x + tree.position.z * tree.position.z);
+                if (distFromStart > 15) { // Only add if 15 units away from center
+                    scene.add(tree);
+                    obstacles.push(tree); // Add to collision array
+                }
+            }
+
+            // 8. People (Obstacles)
+            for (let i = 0; i < 50; i++) {
+                const person = createPerson();
+                person.position.set(
+                    (Math.random() - 0.5) * 480, // Spread them out
+                    0, // People start from the ground
+                    (Math.random() - 0.5) * 480
+                );
+
+                // Don't place people too close to the starting point
+                const distFromStart = Math.sqrt(person.position.x * person.position.x + person.position.z * person.position.z);
+                if (distFromStart > 20) { // Only add if 20 units away from center
+                    scene.add(person);
+                    obstacles.push(person); // Add to collision array
+                }
+            }
+ 
+            // 8.5. Add the Chaser NPC
+            const chaser = createChaserNPC();
+            chaser.position.set(30, 0, 30); // Place her somewhere specific
+            scene.add(chaser);
+            obstacles.push(chaser); // Add to collision array
+
+            // 9. Event Listeners
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onWindowResize);
+
+            // Start the game loop
+            animate();
+        }
+
+        // --- Create Car ---
+        function createCar() {
+            car = new THREE.Group();
+            
+            // Materials
+            const bodyMat = new THREE.MeshStandardMaterial({ 
+                color: 0x333333, // Dark grey
+                roughness: 0.2, 
+                metalness: 0.5 // More metallic
+            }); 
+            const cabinMat = new THREE.MeshStandardMaterial({ 
+                color: 0x000000, // Black cabin
+                roughness: 0.5,
+                transparent: true,
+                opacity: 0.8 // Make windows slightly see-through
+            }); 
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 }); // Black tires
+            const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.0 }); // Yellow headlights, OFF by default
+            const taillightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.0 }); // Red taillights, OFF by default
+            const reverseLightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.0 }); // White reverse lights, OFF by default
+            const grilleMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 }); // Dark grille
+            
+            // Geometries
+            const bodyGeo = new THREE.BoxGeometry(2.2, 1.2, 4.2); // (width, height, length)
+            const cabinGeo = new THREE.BoxGeometry(2.0, 1.0, 2.5); // Taller, wider, longer cabin
+            const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16); // (radius, radius, height) - Bigger wheels
+            const headlightGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+            const taillightGeo = new THREE.BoxGeometry(0.3, 0.2, 0.1);
+            const reverseLightGeo = new THREE.BoxGeometry(0.2, 0.15, 0.1); // New geometry for reverse lights
+            const grilleGeo = new THREE.BoxGeometry(1.0, 0.4, 0.1);
+            const mirrorGeo = new THREE.BoxGeometry(0.1, 0.2, 0.3);
+
+            // Main Body
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.6; // Body is 1.2 high, so center is at 0.6. Sits on wheels (y=0.5)
+            body.castShadow = true;
+            car.add(body);
+            
+            // Cabin
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.set(0, 1.7, -0.4); // (0, body_top + cabin_half_h, z_offset) = (0, 1.2 + 0.5, -0.4)
+            cabin.castShadow = true;
+            car.add(cabin);
+
+            // --- Details ---
+
+            // Headlights
+            const headlightL = new THREE.Mesh(headlightGeo, headlightMat);
+            headlightL.position.set(0.8, 0.8, 2.11); // (x, y, z_front + 0.01)
+            car.add(headlightL);
+
+            const headlightR = new THREE.Mesh(headlightGeo, headlightMat);
+            headlightR.position.set(-0.8, 0.8, 2.11);
+            car.add(headlightR);
+
+            // Taillights
+            const taillightL = new THREE.Mesh(taillightGeo, taillightMat);
+            taillightL.position.set(0.8, 0.8, -2.11); // (x, y, z_back - 0.01)
+            car.add(taillightL);
+
+            const taillightR = new THREE.Mesh(taillightGeo, taillightMat);
+            taillightR.position.set(-0.8, 0.8, -2.11);
+            car.add(taillightR);
+
+            // Reverse Lights (new)
+            const reverseLightL = new THREE.Mesh(reverseLightGeo, reverseLightMat);
+            reverseLightL.position.set(0.5, 0.5, -2.11); // Placed slightly lower and more central
+            car.add(reverseLightL);
+
+            const reverseLightR = new THREE.Mesh(reverseLightGeo, reverseLightMat);
+            reverseLightR.position.set(-0.5, 0.5, -2.11);
+            car.add(reverseLightR);
+
+            // Grille
+            const grille = new THREE.Mesh(grilleGeo, grilleMat);
+            grille.position.set(0, 0.8, 2.11);
+            car.add(grille);
+
+            // Side Mirrors
+            const mirrorL = new THREE.Mesh(mirrorGeo, cabinMat);
+            mirrorL.position.set(1.15, 1.5, 0.5); // (body_w/2 + offset, cabin_y, cabin_z)
+            car.add(mirrorL);
+
+            const mirrorR = new THREE.Mesh(mirrorGeo, cabinMat);
+            mirrorR.position.set(-1.15, 1.5, 0.5);
+            car.add(mirrorR);
+
+            // --- Wheels ---
+            wheelFL = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelFL.position.set(1.1, 0, 1.6); // (body_half_w, 0, body_half_l - offset)
+            wheelFL.rotation.x = Math.PI / 2; // Keep rotation
+            car.add(wheelFL);
+
+            wheelFR = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelFR.position.set(-1.1, 0, 1.6);
+            wheelFR.rotation.x = Math.PI / 2;
+            car.add(wheelFR);
+
+            wheelBL = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelBL.position.set(1.1, 0, -1.6);
+            wheelBL.rotation.x = Math.PI / 2;
+            car.add(wheelBL);
+
+            wheelBR = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelBR.position.set(-1.1, 0, -1.6);
+            wheelBR.rotation.x = Math.PI / 2;
+            car.add(wheelBR);
+            
+            // Add a "collision radius" to the car for simple physics
+            car.userData.collisionRadius = 2.1; // Approx half the car's length (4.2 / 2)
+            
+            // Store light materials for access in updateGame
+            car.userData.materials = {
+                headlight: headlightMat,
+                taillight: taillightMat,
+                reverse: reverseLightMat
+            };
+
+            // Set car's initial position
+            car.position.y = 0.5; // Lift it to match new wheel radius
+            scene.add(car);
+        }
+
+        // --- Create Tree ---
+        function createTree() {
+            const tree = new THREE.Group();
+
+            // Randomize tree size
+            const trunkHeight = Math.random() * 3 + 4; // 4m to 7m
+            const trunkRadius = Math.random() * 0.3 + 0.6; // 0.6m to 0.9m
+            const leavesHeight = Math.random() * 4 + 7; // 7m to 11m
+            const leavesRadius = Math.random() * 1 + 2.5; // 2.5m to 3.5m
+
+            // Randomize leaf color slightly
+            const leafColor = new THREE.Color(0x228B22);
+            leafColor.offsetHSL(0, 0, (Math.random() - 0.5) * 0.1);
+
+            // Materials
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 }); // Brown trunk
+            const leavesMat = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.8 }); 
+
+            // Geometries
+            const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.8, trunkRadius, trunkHeight);
+            const leavesGeo = new THREE.ConeGeometry(leavesRadius, leavesHeight, 8);
+
+            // Trunk
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = trunkHeight / 2;
+            trunk.castShadow = true;
+            tree.add(trunk);
+
+            // Leaves
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.y = trunkHeight + leavesHeight / 2 - 1.5; // Sit on trunk
+            leaves.castShadow = true;
+            tree.add(leaves);
+
+            // Add collision radius to the tree (based on trunk)
+            tree.userData.collisionRadius = trunkRadius;
+            tree.userData.type = 'tree'; // Add type for collision logic
+
+            return tree;
+        }
+
+        // --- Create Person NPC ---
+        function createPerson() {
+            const person = new THREE.Group();
+
+            // Random shirt color
+            const colors = [0xFF69B4, 0x00BFFF, 0xADFF2F, 0xFFFF00, 0xDA70D6]; // Pink, Blue, Green, Yellow, Orchid
+            const shirtColor = colors[Math.floor(Math.random() * colors.length)];
+
+            // Materials
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xE0AC69, roughness: 0.8 }); // A neutral skin tone
+            const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.8 }); 
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1E90FF, roughness: 0.8 }); // Blue pants
+
+            // Geometries
+            const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+            const torsoGeo = new THREE.BoxGeometry(0.5, 0.7, 0.3);
+            const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8);
+
+            // Legs (y from 0 to 0.8)
+            const legL = new THREE.Mesh(legGeo, pantsMat);
+            legL.position.set(0.15, 0.4, 0); // (x, leg_height / 2, z)
+            legL.castShadow = true;
+            person.add(legL);
+
+            const legR = new THREE.Mesh(legGeo, pantsMat);
+            legR.position.set(-0.15, 0.4, 0);
+            legR.castShadow = true;
+            person.add(legR);
+
+            // Torso (y from 0.8 to 1.5)
+            const torso = new THREE.Mesh(torsoGeo, shirtMat);
+            torso.position.y = 0.8 + (0.7 / 2); // 1.15
+            torso.castShadow = true;
+            person.add(torso);
+
+            // Head (y from 1.5 to 2.0)
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.position.y = 0.8 + 0.7 + 0.25; // 1.75
+            head.castShadow = true;
+            person.add(head);
+            
+            // Add collision radius to the person
+            person.userData.collisionRadius = 0.3; // Approx half the torso width
+            person.userData.type = 'person'; // Add type for collision logic
+            person.userData.isFallen = false; // State for falling
+            person.userData.velocity = Math.random() * 0.02 + 0.01; // Walking speed
+            person.userData.turnRate = (Math.random() - 0.5) * 0.02; // Initial random turn
+
+            return person;
+        }
+
+        // --- Create Chaser NPC ---
+        function createChaserNPC() {
+            // This function is a copy of createPerson, but scaled up
+            // and with different AI properties.
+            const person = new THREE.Group();
+
+            // Materials
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xE0AC69, roughness: 0.8 }); 
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0xFF0000, roughness: 0.8 }); // Bright red shirt
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 }); // Dark pants
+
+            // Geometries
+            const headGeo = new THREE.SphereGeometry(0.25, 16, 16);
+            const torsoGeo = new THREE.BoxGeometry(0.5, 0.7, 0.3);
+            const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8);
+
+            // Legs
+            const legL = new THREE.Mesh(legGeo, pantsMat);
+            legL.position.set(0.15, 0.4, 0); 
+            legL.castShadow = true;
+            person.add(legL);
+
+            const legR = new THREE.Mesh(legGeo, pantsMat);
+            legR.position.set(-0.15, 0.4, 0);
+            legR.castShadow = true;
+            person.add(legR);
+
+            // Torso
+            const torso = new THREE.Mesh(torsoGeo, shirtMat);
+            torso.position.y = 0.8 + (0.7 / 2); // 1.15
+            torso.castShadow = true;
+            person.add(torso);
+
+            // Head
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.position.y = 0.8 + 0.7 + 0.25; // 1.75
+            head.castShadow = true;
+            person.add(head);
+            
+            // --- Make this NPC unique ---
+            person.scale.set(10.0, 10.0, 10.0); // Make her 10x bigger (was 5.0)
+            person.position.y = 0; // Ensure she's on the ground after scaling (legs start at y=0)
+
+            // Add collision radius to the person
+            person.userData.collisionRadius = (0.3 * 10.0); // Scaled collision radius (was 5.0)
+            person.userData.type = 'chaser'; // Special type for collision logic
+            person.userData.isChasing = false; // Not chasing by default
+            person.userData.isFallen = false; // Chaser doesn't fall
+            person.userData.velocity = 0.01; // Normal walking speed
+            person.userData.chaseSpeed = 0.30; // Speed when chasing (was 0.15)
+            person.userData.turnRate = (Math.random() - 0.5) * 0.02; 
+
+            return person;
+        }
+
+
+        // --- Event Handlers ---
+        function onKeyDown(event) {
+            keys[event.key] = true;
+        }
+
+        function onKeyUp(event) {
+            keys[event.key] = false;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Game Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update physics and camera
+            updateGame();
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Update Function ---
+        function updateGame() {
+            // 1. Update Car Physics
+            
+            // --- Determine braking state ---
+            // We are braking if:
+            // 1. We press 'ArrowDown' while moving forward
+            // 2. We are not pressing 'ArrowUp' or 'ArrowDown' and coasting to a stop (velocity is positive)
+            const isBraking = (keys['ArrowDown'] && velocity > 0.01) || 
+                              (!keys['ArrowUp'] && !keys['ArrowDown'] && velocity > 0.01);
+            
+            // --- Determine acceleration state ---
+            const isAccelerating = keys['ArrowUp'] && velocity >= 0;
+
+            // --- Determine reversing state ---
+            const isReversing = keys['ArrowDown'] && velocity < -0.01;
+
+
+            // Acceleration/Braking
+            if (keys['ArrowUp']) {
+                velocity = Math.min(velocity + acceleration, maxSpeed);
+            } else if (keys['ArrowDown']) {
+                velocity = Math.max(velocity - (acceleration * 0.7), maxReverseSpeed);
+            } else {
+                velocity *= deceleration; // Apply friction
+            }
+            
+            // Steering
+            if (keys['ArrowLeft']) {
+                turnRate = Math.min(turnRate + turnSpeed, maxTurnRate);
+            } else if (keys['ArrowRight']) {
+                turnRate = Math.max(turnRate - turnSpeed, -maxTurnRate);
+            } else {
+                turnRate *= turnDamping; // Self-center steering
+            }
+
+            // Apply steering only when moving
+            if (Math.abs(velocity) > 0.01) {
+                // Steering angle is proportional to speed (less sensitive at high speed)
+                const steerAmount = turnRate * (1 - Math.abs(velocity / maxSpeed) * 0.5);
+                car.rotation.y += steerAmount;
+            }
+
+            // 2. Update NPCs (Walk and Fall)
+            for (const obstacle of obstacles) {
+                if (obstacle.userData.type === 'person') {
+                    if (obstacle.userData.isFallen) {
+                        // If fallen, animate falling down to 90 degrees
+                        if (obstacle.rotation.x < Math.PI / 2) {
+                            obstacle.rotation.x = Math.min(obstacle.rotation.x + 0.1, Math.PI / 2);
+                        }
+                    } else {
+                        // Not fallen, so walk around
+                        obstacle.rotation.y += obstacle.userData.turnRate;
+                        const p_forward = new THREE.Vector3(0, 0, 1).applyQuaternion(obstacle.quaternion);
+                        obstacle.position.add(p_forward.multiplyScalar(obstacle.userData.velocity));
+
+                        // Randomly change direction
+                        if (Math.random() < 0.01) { // 1% chance per frame
+                            obstacle.userData.turnRate = (Math.random() - 0.5) * 0.02;
+                        }
+
+                        // Boundary check to keep them on the map
+                        if (Math.abs(obstacle.position.x) > 245 || Math.abs(obstacle.position.z) > 245) {
+                            obstacle.rotation.y += Math.PI; // Turn around
+                        }
+                    }
+                } else if (obstacle.userData.type === 'chaser') {
+                    if (obstacle.userData.isChasing) {
+                        // --- CHASE LOGIC ---
+                        // 1. Turn to face the car
+                        // Calculate the angle to the car
+                        const targetAngle = Math.atan2(
+                            car.position.x - obstacle.position.x, 
+                            car.position.z - obstacle.position.z
+                        );
+                        // Smoothly turn towards the target angle
+                        obstacle.rotation.y = lerpAngle(obstacle.rotation.y, targetAngle, 0.05); // <-- FIXED HERE
+
+                        // 2. Move forward (towards the car)
+                        const p_forward = new THREE.Vector3(0, 0, 1).applyQuaternion(obstacle.quaternion);
+                        obstacle.position.add(p_forward.multiplyScalar(obstacle.userData.chaseSpeed));
+
+                    } else {
+                        // --- WANDER LOGIC (same as 'person') ---
+                        obstacle.rotation.y += obstacle.userData.turnRate;
+                        const p_forward = new THREE.Vector3(0, 0, 1).applyQuaternion(obstacle.quaternion);
+                        obstacle.position.add(p_forward.multiplyScalar(obstacle.userData.velocity));
+
+                        if (Math.random() < 0.01) { 
+                            obstacle.userData.turnRate = (Math.random() - 0.5) * 0.02;
+                        }
+                        if (Math.abs(obstacle.position.x) > 245 || Math.abs(obstacle.position.z) > 245) {
+                            obstacle.rotation.y += Math.PI;
+                        }
+                    }
+                }
+            }
+            
+            // 3. Collision Detection
+            // Calculate the car's next position
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(car.quaternion);
+            const nextPos = car.position.clone().add(forward.multiplyScalar(velocity));
+            
+            let hardCollision = false; // For trees
+            // Renamed 'tree' to 'obstacle' to handle both trees and people
+            for (const obstacle of obstacles) { 
+                const dist = nextPos.distanceTo(obstacle.position);
+                const min_dist = car.userData.collisionRadius + obstacle.userData.collisionRadius;
+
+                if (dist < min_dist) {
+                    if (obstacle.userData.type === 'tree') {
+                        hardCollision = true; // Hit a tree
+                        break; // Stop checking, tree collision is final
+                    }
+
+                    if (obstacle.userData.type === 'person' && !obstacle.userData.isFallen) {
+                        // Hit a standing person
+                        obstacle.userData.isFallen = true;
+                        obstacle.userData.velocity = 0; // Stop them from walking
+                        velocity *= 0.5; // Slow the car down
+                        // Don't break, in case there's a tree right behind them
+                    }
+
+                    if (obstacle.userData.type === 'chaser' && !obstacle.userData.isChasing) {
+                        // Hit the chaser for the first time
+                        obstacle.userData.isChasing = true; // START THE CHASE
+                        velocity *= 0.8; // Slow the car down a bit
+                    }
+                }
+            }
+
+            // 4. Apply Velocity
+            if (!hardCollision) {
+                car.position.copy(nextPos); // Move if no hard collision
+            } else {
+                velocity = -velocity * 0.3; // Bounce back from tree
+            }
+
+            // 5. Update Wheels (was 2)
+            const wheelRotation = velocity / 0.5; // 0.5 is new wheel radius
+            
+            // Spin all wheels based on velocity
+            wheelFL.rotation.y -= wheelRotation;
+            wheelFR.rotation.y -= wheelRotation;
+            wheelBL.rotation.y -= wheelRotation;
+            wheelBR.rotation.y -= wheelRotation;
+            
+            // Turn front wheels for steering visual
+            const steerAngle = turnRate * 5; // Exaggerate for visual
+            wheelFL.rotation.z = steerAngle;
+            wheelFR.rotation.z = steerAngle;
+
+            // 6. Update Lights (was 3)
+            if (car.userData.materials) {
+                const materials = car.userData.materials;
+
+                // Headlights on when accelerating
+                materials.headlight.emissiveIntensity = isAccelerating ? 1.0 : 0.0;
+
+                // Brake lights on when braking
+                materials.taillight.emissiveIntensity = isBraking ? 1.0 : 0.0;
+
+                // Reverse lights on when reversing
+                materials.reverse.emissiveIntensity = isReversing ? 1.0 : 0.0;
+            }
+
+
+            // 7. Update Camera (was 4)
+            // Make the camera follow the car smoothly
+            const relativeCameraOffset = new THREE.Vector3(0, 6, -12); // A bit higher and further back
+            
+            // Apply the car's rotation to the offset vector
+            const cameraOffset = relativeCameraOffset.applyMatrix4(car.matrixWorld);
+            
+            // Smoothly interpolate (lerp) the camera's position
+            camera.position.lerp(cameraOffset, 0.05);
+            
+            // Make camera look at the car's position
+            camera.lookAt(car.position);
+
+            // 8. Update Light (was 5)
+            // Make the light follow the car to keep shadows sharp nearby
+            directionalLight.position.set(
+                car.position.x + 50,
+                car.position.y + 100,
+                car.position.z + 50
+            );
+        }
+
+        // --- Start the game ---
+        // init(); // <-- We will change this
+        window.onload = init; // <-- To this. Runs init() only after the page is fully loaded.
+
+    </script>
+</body>
+</html>
+
+
+
+
+
+
