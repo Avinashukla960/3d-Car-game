@@ -43,3 +43,8 @@ No installation or build step needed.
 git clone https://github.com/your-username/3d-car-game.git
 cd 3d-car-game
 ```
+Then just open `index.html` in your browser:
+
+```bash
+# macOS
+open index.html
