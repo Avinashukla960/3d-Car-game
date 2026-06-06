@@ -21,3 +21,16 @@ Open `index.html` in any modern browser to play instantly.
 - **Giant Chaser NPC** — a 10× scaled pursuer who wanders peacefully until you bump into her, then relentlessly hunts you down
 - **Smooth follow camera** with lerped position for a cinematic feel
 - **Dynamic shadows** that follow the car so they stay sharp
+
+---
+
+## Controls
+
+| Key | Action |
+|-----|--------|
+| `↑` Arrow Up | Accelerate |
+| `↓` Arrow Down | Brake / Reverse |
+| `←` Arrow Left | Steer left |
+| `→` Arrow Right | Steer right |
+
+---
