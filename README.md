@@ -34,3 +34,4 @@ Open `index.html` in any modern browser to play instantly.
 | `→` Arrow Right | Steer right |
 
 ---
+
