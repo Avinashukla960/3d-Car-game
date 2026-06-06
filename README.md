@@ -13,3 +13,11 @@ Open `index.html` in any modern browser to play instantly.
 ---
 
 ## Features
+- **3D open world** with a 500×500 unit grassy map, fog, and dynamic shadows
+- **Realistic-ish car physics** — acceleration, friction, reverse, and speed-sensitive steering
+- **Animated lights** — headlights glow when accelerating, brake lights when slowing, reverse lights when backing up
+- **Pedestrian NPCs** — 50 wandering people that tumble when you hit them
+- **Tree obstacles** — 150 procedurally placed trees with randomized sizes; hitting one bounces you back
+- **Giant Chaser NPC** — a 10× scaled pursuer who wanders peacefully until you bump into her, then relentlessly hunts you down
+- **Smooth follow camera** with lerped position for a cinematic feel
+- **Dynamic shadows** that follow the car so they stay sharp
