@@ -35,3 +35,11 @@ Open `index.html` in any modern browser to play instantly.
 
 ---
 
+## Getting Started
+
+No installation or build step needed.
+
+```bash
+git clone https://github.com/your-username/3d-car-game.git
+cd 3d-car-game
+```
