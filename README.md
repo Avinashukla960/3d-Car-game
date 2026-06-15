@@ -63,3 +63,10 @@ npx serve .
 ```
 
 ---
+
+## Project Structure
+
+```
+3d-car-game/
+└── index.html      # Everything — game logic, rendering, NPCs, all in one file
+```
