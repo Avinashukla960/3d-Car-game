@@ -70,3 +70,8 @@ npx serve .
 3d-car-game/
 └── index.html      # Everything — game logic, rendering, NPCs, all in one file
 ```
+The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`).
+
+---
+
+## Tech Stack
