@@ -50,3 +50,7 @@ Then just open `index.html` in your browser:
 open index.html
 # Linux
 xdg-open index.html
+
+# Windows
+start index.html
+```
