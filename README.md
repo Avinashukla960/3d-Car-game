@@ -78,3 +78,9 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 - [Three.js r128](https://threejs.org/) — 3D rendering
 - Vanilla JavaScript (ES Modules)
 - No frameworks, no bundler, no install
+---
+
+## How It Works
+
+| System | Details |
+|--------|---------|
