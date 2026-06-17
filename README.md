@@ -97,3 +97,6 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 - [ ] Mobile touch / joystick controls
 - [ ] Score counter (pedestrians hit, distance driven)
 - [ ] Sound effects and engine audio
+- [ ] Road network and buildings
+- [ ] Multiple chasers scaling in difficulty
+- [ ] Minimap
