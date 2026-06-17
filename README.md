@@ -100,3 +100,10 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 - [ ] Road network and buildings
 - [ ] Multiple chasers scaling in difficulty
 - [ ] Minimap
+
+
+---
+
+## License
+
+MIT — do whatever you want with it.
