@@ -87,3 +87,6 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 | **Rendering** | `WebGLRenderer` with PCF soft shadow maps |
 | **Car physics** | Velocity + friction model; speed-sensitive steering with turn damping |
 | **Collision** | Circle-based collision using per-object `collisionRadius` |
+| **NPCs** | State-machine AI — wander → chase on contact (chaser); walk → fall on contact (pedestrians) |
+| **Camera** | Offset vector rotated by car's world matrix, lerped each frame |
+| **Lights** | Material `emissiveIntensity` toggled based on car state |
