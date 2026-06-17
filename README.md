@@ -84,3 +84,6 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 
 | System | Details |
 |--------|---------|
+| **Rendering** | `WebGLRenderer` with PCF soft shadow maps |
+| **Car physics** | Velocity + friction model; speed-sensitive steering with turn damping |
+| **Collision** | Circle-based collision using per-object `collisionRadius` |
