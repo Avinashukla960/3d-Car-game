@@ -90,3 +90,10 @@ The entire game lives in a single HTML file. Three.js is loaded via CDN (`r128`)
 | **NPCs** | State-machine AI — wander → chase on contact (chaser); walk → fall on contact (pedestrians) |
 | **Camera** | Offset vector rotated by car's world matrix, lerped each frame |
 | **Lights** | Material `emissiveIntensity` toggled based on car state |
+---
+
+## Possible Improvements
+
+- [ ] Mobile touch / joystick controls
+- [ ] Score counter (pedestrians hit, distance driven)
+- [ ] Sound effects and engine audio
